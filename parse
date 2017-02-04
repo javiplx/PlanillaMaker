@@ -1,0 +1,109 @@
+#!/usr/bin/python
+
+from googleapis import GoogleApp, tools
+import sheets
+import numpy
+
+from datetime import timedelta
+import time
+import argparse
+import sys
+
+el_calendarId='eivcdpf1ugk65336ia1cssrp3k@group.calendar.google.com'
+
+def do_event ( calendar , data , dia , persona , _turno ) :
+    tstamp = sheets.serial_to_date(dia)
+    turno = data.turnos.index(_turno)
+    startTime = '%sT%02d:00:00' % ( tstamp.strftime('%F') , data.COVERAGE[turno][0] )
+    finish = data.COVERAGE[turno][0] + data.COVERAGE[turno][1]
+    if finish < 24 :
+        endTime   = '%sT%02d:00:00' % ( tstamp.strftime('%F') , finish )
+    else :
+        tstamp = tstamp + timedelta(days=1)
+        endTime   = '%sT%02d:00:00' % ( tstamp.strftime('%F') , finish % 24 )
+    event = { 'summary': persona,
+              'start':  {'dateTime': startTime, 'timeZone': 'Europe/Madrid'},
+              'end':    {'dateTime': endTime, 'timeZone': 'Europe/Madrid'},
+              'colorId': '%d' % (data.names.index(persona)+1)
+              }
+    calendar.insert(calendarId=el_calendarId,
+                    sendNotifications=False, body=event).execute()
+
+if __name__ == "__main__" :
+
+    calendar = False
+    if sys.argv.count("--calendar") :
+        app = GoogleApp('Google APIs', ['calendar', 'spreadsheets'])
+        calendar = app.events()
+
+    spreadsheetId = '1H3jCVPEwQUb_RTKbOGTgQoAL8tKU1tyMhDUV2HPZtfw'
+    model_data = sheets.ModelData(spreadsheetId)
+
+
+    # Raw sheet cleaning
+    content = model_data.get( 'Asignacion' )
+    if content : # Worksheet might be empty
+        rows = len(content)
+        for r in range(rows) :
+            content[r] = [ '' for c in content[r] ]
+        model_data.put( 'Asignacion!A1' , content )
+
+    # Raw calendar removal
+    if calendar :
+        eventList = calendar.list(calendarId=el_calendarId).execute()
+        pageToken = eventList.get('nextPageToken', False)
+        while pageToken : # eventList['items'] :
+            for event in eventList['items'] :
+                time.sleep(0.25)
+                calendar.delete(calendarId=el_calendarId,
+                                eventId=event['id']).execute()
+            print("Removed %s"%len(eventList['items']))
+            eventList = calendar.list(calendarId=el_calendarId, pageToken=pageToken).execute()
+            pageToken = eventList.get('nextPageToken', False)
+            time.sleep(5)
+        if not sys.argv.count("--write") :
+            sys.exit(1)
+
+
+    fd = open('planilla3.sol')
+    status = fd.readline()[:-1].split()[1:]
+
+    if status[1] != '0' :
+        model_data.put( 'Asignacion!B1' , [ model_data.names ] )
+        model_data.put( 'Asignacion!A2' , [ [ "No solution found" ] ] )
+        print "\nNo solution found\n"
+        sys.exit(1)
+
+    personas = fd.readline()[:-1].split()[1:]
+    worked = map(int, fd.readline()[:-1].split()[1:])
+    spare = map(int, fd.readline()[:-1].split()[1:])
+
+    TURNOS = {}
+    for d in model_data.days :
+        TURNOS[d] = [" " for n in personas]
+
+    for line in fd.readlines() :
+        if not line[:-1] : break
+        d, t, p = line[:-1].split()
+        if calendar :
+            do_event(calendar, model_data, int(d), p, t)
+            time.sleep(0.25)
+        TURNOS[int(d)][model_data.names.index(p)] = t
+
+    print
+    values = []
+    for d in model_data.days :
+        print "%s %s" % ( sheets.serial_to_date(d).strftime("%F") , " ".join(TURNOS[d]) )
+        row = [ sheets.serial_to_date(d).strftime("%F") ]
+        row.extend( TURNOS[d] )
+        values.append( row )
+    print
+    print "CURRADAS:", " ".join(map(str, worked))
+    print "SPARE:   ", " ".join(map(str, spare))
+
+    model_data.put( 'Asignacion!B1' , [ model_data.names ] )
+    sheet_spare = [ 'Unassigned' ]
+    sheet_spare.extend( [ "%3d of %3d" % ( item[0] , item[0]+item[1] ) for item in zip(spare,worked) ] )
+    model_data.put( 'Asignacion!A2' , [ sheet_spare ] )
+    model_data.put( 'Asignacion!A3' , values )
+
