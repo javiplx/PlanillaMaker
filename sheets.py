@@ -65,6 +65,8 @@ class ModelData :
     self.sheet = get_sheet(spreadsheetId)
 
     values = self.get('Shifts')
+    if not values :
+        raise Exception("No data on the 'Shifts' tab")
 
     n = 0
     COVERAGE = numpy.zeros((len(values),1), dtype=numpy.int8)
