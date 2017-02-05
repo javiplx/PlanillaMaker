@@ -1,0 +1,35 @@
+
+set PERSONA;
+set DIA;
+set WEEK;
+set TURNO;
+set SLOT;
+
+param HORAS {PERSONA} integer default 40;
+param COVERAGE {SLOT,TURNO} integer ;
+param NEXTCOV  {SLOT,TURNO} integer ;
+param DURACION {t in TURNO} integer := sum{s in SLOT} ( NEXTCOV[s,t] + COVERAGE[s,t] ); 
+
+# El truco con los sets parece que no tira en MathProg
+param WEEKEND {DIA} binary default 0;
+param VACATION {DIA} binary default 0;
+param VISPERAS {d in DIA} binary default 0;
+
+var X{DIA,TURNO,PERSONA}, binary;
+var CURRADAS{PERSONA}, integer , >=0;
+var SPARE{PERSONA}, integer , >=0;
+var CURRADASW{PERSONA,WEEK}, integer , >=0;
+var SPAREW{PERSONA,WEEK}, integer , >=0;
+
+maximize SPAREHOURS: sum{p in PERSONA} SPARE[p];
+
+# Cumplimiento de horas mensuales
+#s.t. eq_curradas{p in PERSONA}: CURRADAS[p] = sum{d in DIA,t in TURNO} ( X[d,t,p] * DURACION[t] );
+s.t. eq_convenio{p in PERSONA,w in WEEK}: CURRADASW[p,w] <= HORAS[p];
+s.t. eq_spare{p in PERSONA,w in WEEK}:    SPAREW[p,w] = HORAS[p] - CURRADASW[p,w];
+# Calculo de horas en todo el periodo
+s.t. eq_curradast{p in PERSONA}: CURRADAS[p] = sum{w in WEEK} CURRADASW[p,w];
+s.t. eq_sparet{p in PERSONA}: SPARE[p] = sum{w in WEEK} SPAREW[p,w];
+
+# Evitar multiples turnos en el mismo dia
+s.t. eq_descansos{p in PERSONA,d in DIA}: sum{t in TURNO}  X[d,t,p] <= 1;
