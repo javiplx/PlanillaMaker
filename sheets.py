@@ -64,7 +64,7 @@ class ModelData :
     self.spreadsheetId = spreadsheetId
     self.sheet = get_sheet(spreadsheetId)
 
-    values = self.get('Turnos')
+    values = self.get('Shifts')
 
     n = 0
     COVERAGE = numpy.zeros((len(values),1), dtype=numpy.int8)
@@ -125,14 +125,14 @@ class ModelData :
             if n :
                 self.visperas.append( start + n - 1 )
     #
-    self.names = values[3][1:]
+    self.names = values[4][1:]
     self.horas = {}
-    for k,v in zip(self.names,values[4][1:]) :
+    for k,v in zip(self.names,values[5][1:]) :
         if v :
             self.horas[k] = v
     #
     self.restricciones = dict([ (n,[]) for n in self.names])
-    for row in values[5:] :
+    for row in values[6:] :
         for n in range(len(row[1:])) :
             if row[n+1]:
                 if isinstance( row[n+1], int ) :

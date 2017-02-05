@@ -41,12 +41,12 @@ if __name__ == "__main__" :
 
 
     # Raw sheet cleaning
-    content = model_data.get( 'Asignacion' )
+    content = model_data.get( 'Assignment' )
     if content : # Worksheet might be empty
         rows = len(content)
         for r in range(rows) :
             content[r] = [ '' for c in content[r] ]
-        model_data.put( 'Asignacion!A1' , content )
+        model_data.put( 'Assignment!A1' , content )
 
     # Raw calendar removal
     if calendar :
@@ -69,8 +69,8 @@ if __name__ == "__main__" :
     status = fd.readline()[:-1].split()[1:]
 
     if status[1] != '0' :
-        model_data.put( 'Asignacion!B1' , [ model_data.names ] )
-        model_data.put( 'Asignacion!A2' , [ [ "No solution found" ] ] )
+        model_data.put( 'Assignment!B1' , [ model_data.names ] )
+        model_data.put( 'Assignment!A2' , [ [ "No solution found" ] ] )
         print "\nNo solution found\n"
         sys.exit(1)
 
@@ -101,9 +101,9 @@ if __name__ == "__main__" :
     print "CURRADAS:", " ".join(map(str, worked))
     print "SPARE:   ", " ".join(map(str, spare))
 
-    model_data.put( 'Asignacion!B1' , [ model_data.names ] )
+    model_data.put( 'Assignment!B1' , [ model_data.names ] )
     sheet_spare = [ 'Unassigned' ]
     sheet_spare.extend( [ "%3d of %3d" % ( item[0] , item[0]+item[1] ) for item in zip(spare,worked) ] )
-    model_data.put( 'Asignacion!A2' , [ sheet_spare ] )
-    model_data.put( 'Asignacion!A3' , values )
+    model_data.put( 'Assignment!A2' , [ sheet_spare ] )
+    model_data.put( 'Assignment!A3' , values )
 
