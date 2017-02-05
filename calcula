@@ -1,0 +1,10 @@
+
+rm -f planilla3.mod planilla3.data planilla3.restrictions planilla3.out planilla3.sol
+
+./get_data
+cat planilla3.base planilla3.restrictions > planilla3.mod
+
+glpsol --math planilla3.mod --data planilla3.data --tmlim 120 | tee planilla3.out
+
+./parse
+

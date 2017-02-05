@@ -1,0 +1,134 @@
+#!/usr/bin/python
+
+import sheets
+
+coverage_template = """
+# ToDo : if last day is also vispera, it is not detected !!!! ( Maybe we should actually use VISPERA ??? )
+param PRESENCIA {d in DIA,s in SLOT} := if WEEKEND[d]+VACATION[d] > 0 then 2
+                                        else if VISPERAS[d] and s in 12..23 then 2
+                                        else 1;
+"""
+
+presencia = """
+# Personal requerido en el slot
+s.t. eq_presencia0{s in %d..%d}: PRESENCIA[%d,s] <= sum{p in PERSONA,t in TURNO} ( X[%d,t,p] * COVERAGE[s,t] );
+s.t. eq_presencia{s in SLOT,d in %d..%d}: PRESENCIA[d,s] <= sum{p in PERSONA,t in TURNO} ( X[d-1,t,p] * NEXTCOV[s,t] + X[d,t,p] * COVERAGE[s,t] );
+
+"""
+
+solapes = """
+# Verificar turnos en el dia previo
+s.t. eq_descansos0{p in PERSONA,d in %d..%d,t in TURNO}: X[d,t,p] + sum{t1 in TURNO: t1 != t}  X[d-1,t1,p] <= 1;
+"""
+
+# VACATION MUST BE GIVEN IN SOME MANNER
+model_data_template = """
+set DIA := {dias};
+set WEEK := {weeks};
+
+{weekdays}
+
+param WEEKEND := {weekends};
+param VACATION := 42741 1  42755 1;
+# VISPERAS DOES NOT ACCOUNT FOR VACATION PRECEEDING DAYS
+param VISPERAS := {visperas};
+
+set TURNO := {turnos};
+set SLOT := {slots};
+
+param COVERAGE : {turnos} :=
+{matrix};
+
+param NEXTCOV : {turnos} :=
+{next};
+
+set PERSONA := {personas};
+param HORAS := {horas};
+
+end;
+"""
+
+solution_template = """
+param output, symbolic := "planilla3.sol";
+solve;
+
+printf "STATUS %s %s\\n", SPAREHOURS, SPAREHOURS.status > output;
+
+printf "PERSONAS" >> output;
+printf{p in PERSONA} " %s" , p >> output;
+printf "\\n" >> output;
+
+printf "CURRADAS" >> output;
+printf{p in PERSONA} " %3i" , CURRADAS[p] >> output;
+printf "\\n" >> output;
+
+printf "SPARE" >> output;
+printf{p in PERSONA} " %3i" , SPARE[p] >> output;
+printf "\\n" >> output;
+
+for {d in DIA,t in TURNO,p in PERSONA: X[d,t,p]}
+  printf "%6d %s %s\\n" , d, t, p >> output;
+
+printf "\\n" >> output;
+printf "CURRADASW\\n" >> output;
+
+for {p in PERSONA} {
+  printf "%3s", p >> output;
+  printf{w in WEEK} " %3i" , CURRADASW[p,w] >> output;
+  printf "\\n" >> output;
+  }
+
+printf "\\n" >> output;
+printf "SPAREW\\n" >> output;
+
+for {p in PERSONA} {
+  printf "%3s", p >> output;
+  printf{w in WEEK} " %3i" , SPAREW[p,w] >> output;
+  printf "\\n" >> output;
+  }
+
+end;
+"""
+
+def main():
+
+    spreadsheetId = '1nr1lKg1qXdr1Ojql1EI8F31NdnKUNjKhs3Csszr8aZ0'
+    model_data = sheets.ModelData(spreadsheetId)
+
+    values = { 'dias': " ".join([str(d) for d in model_data.days]),
+               'weeks': " ".join([str(d) for d in range(model_data.weeks)]),
+               'weekdays': "\n".join(["set WEEK%d := %s;"% (w," ".join(map(str, model_data.weekdays[w]))) for w in range(model_data.weeks)]),
+               'weekends': "  ".join([ "%s 1" % day for day in model_data.weekends]),
+               'visperas': "  ".join([ "%s 1" % day for day in model_data.visperas]),
+               'turnos': " ".join(map(str, model_data.turnos)),
+               'slots': " ".join(map(str, model_data.slots)),
+               'matrix': "\n".join(model_data.matrix),
+               'next': "\n".join(model_data.next),
+               'personas': " ".join(model_data.names),
+               'horas': "  ".join(["%s %s" % (k,v) for k,v in model_data.horas.iteritems() if v])
+               }
+
+
+    with open("planilla3.restrictions", 'w') as fd :
+        for w in range(model_data.weeks) :
+            fd.write( "set WEEK%d;\n" % w )
+        fd.write( "\n# Cumplimiento de horas semanales\n" )
+        for w in range(model_data.weeks) :
+            fd.write( "s.t. eq_curradas%d{p in PERSONA}: CURRADASW[p,%d] = sum{d in WEEK%d,t in TURNO} ( X[d,t,p] * DURACION[t] );\n" % ( w , w , w ))
+        fd.write( solapes % ( model_data.days[1] , model_data.days[-1] ) )
+        fd.write( coverage_template ) # % model_data.days[-1] )
+        fd.write( presencia % ( model_data.slots[model_data.assigned] , model_data.slots[-1] , model_data.days[0] , model_data.days[0] , model_data.days[1] , model_data.days[-1] ) )
+        n = 1
+        for name in model_data.names :
+            for restriccion in model_data.restricciones.get(name, []) :
+                fd.write("s.t. eq_%05d{t in TURNO}: X[%d,t,'%s'] = 0;\n"%(n, restriccion, name))
+                n += 1
+        fd.write(solution_template)
+
+    with open("planilla3.data", 'w') as fd :
+        fd.write(model_data_template.format(**values))
+
+
+if __name__ == '__main__':
+    main()
+
